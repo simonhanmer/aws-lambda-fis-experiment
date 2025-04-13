@@ -1,0 +1,267 @@
+# This template is used to demonstrate the use of FIS to test lambda functions
+AWSTemplateFormatVersion : '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: FIS Lambda testing experiment
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: The name of the project
+    Default: fis-demo
+  RetentionInDays:
+    Type: Number
+    Description: Number of days to retain logs
+    Default: 3
+
+Resources:
+  FISConfigBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "fis-config-${AWS::AccountId}-${AWS::Region}-bucket"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  FISLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "fis-logs-${AWS::AccountId}-${AWS::Region}-bucket"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+      - Key: Project
+        Value: !Ref ProjectName
+
+  FISLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/fis/${ProjectName}"
+      RetentionInDays: !Ref RetentionInDays
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  FISLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${DemoLambdaFunctionWithFIS}"
+      RetentionInDays: !Ref RetentionInDays
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${DemoLambdaFunctionWithoutFIS}"
+      RetentionInDays: !Ref RetentionInDays
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+          
+
+  FISLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-FIS-Lambda-Role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-FIS-Lambda-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: S3ListAllBuckets
+                Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                Resource: "*"
+              - Sid: S3ListBucket
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${FISConfigBucket}"
+                  - !Sub "arn:aws:s3:::${FISConfigBucket}/*"
+              - Sid: S3GetConfig
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${FISConfigBucket}"
+                  - !Sub "arn:aws:s3:::${FISConfigBucket}/*"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  DemoLambdaFunctionWithoutFIS:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-test-function"
+      CodeUri: ./source/
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt FISLambdaRole.Arn
+      Architectures:
+        - x86_64
+      Runtime: python3.12
+      MemorySize: 128
+      Timeout: 10
+      Tags:
+        Project: !Ref ProjectName
+
+  DemoLambdaFunctionWithFIS:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-test-function-with-fis"
+      CodeUri: ./source/
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt FISLambdaRole.Arn
+      Architectures:
+        - x86_64
+      Runtime: python3.12
+      MemorySize: 128
+      Timeout: 10
+      Environment:
+        Variables:
+          AWS_FIS_CONFIGURATION_LOCATION: !Sub "${FISConfigBucket.Arn}/FisConfigs/*"
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/aws-fis/bootstrap
+      Layers:
+        - arn:aws:lambda:eu-west-2:637423427737:layer:aws-fis-extension-x86_64:9
+      Tags:
+        Project: !Ref ProjectName
+        FIS-Demo: true
+
+
+  FISExperimentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-FIS-Experiment-Role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - fis.amazonaws.com
+                - delivery.logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "${ProjectName}-Experiment-Policy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: S3Config
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${FISConfigBucket}/*"
+              - Sid: GetLambda
+                Effect: Allow
+                Action:
+                  - lambda:GetFunction
+                Resource: "*"
+              - Sid: GetResources
+                Effect: Allow
+                Action:
+                  - tag:GetResources
+                Resource: "*"
+              - Sid: ManageS3Policy
+                Effect: Allow
+                Action:
+                  - s3:PutObjectPolicy
+                  - s3:GetObjectPolicy
+                Resource:
+                  - !Sub "arn:aws:s3:::${FISLogsBucket}/logs/*"
+              - Sid: PutS3Logs
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${FISLogsBucket}/logs/*"
+              - Sid: GetDashboard
+                Effect: Allow
+                Action:
+                  - cloudwatch:GetDashboard
+                Resource: "*"
+              - Sid: GetWidgets
+                Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricWidgetImage
+                Resource: "*"
+              - Sid: ManageCWLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogDelivery
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: "*"
+                  
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+
+  FISExperimentTemplate:
+    Type: "AWS::FIS::ExperimentTemplate"
+    Properties:
+      Description: "FIS Lambda experiment"
+      Actions:
+        delay_function:
+          ActionId: "aws:lambda:invocation-add-delay"
+          Targets:
+            Functions: "Functions-Target-1"
+          StartAfter: []
+          Parameters:
+            duration: "PT3M"
+            invocationPercentage: "100"
+            startupDelayMilliseconds: "35000"
+      ExperimentOptions:
+        EmptyTargetResolutionMode: "fail"
+        AccountTargeting: "single-account"
+      StopConditions:
+      - Source: "none"
+      Targets:
+        Functions-Target-1:
+          Filters: []
+          ResourceType: "aws:lambda:function"
+          ResourceTags: {
+            FIS-Demo: true
+          }
+          SelectionMode: "ALL"
+      RoleArn: !GetAtt FISExperimentRole.Arn
+      LogConfiguration:
+        CloudWatchLogsConfiguration:
+          LogGroupArn: !GetAtt FISLogGroup.Arn
+        S3Configuration:
+          BucketName: !Ref FISLogsBucket
+          Prefix: "logs"
+        LogSchemaVersion: 2
+      Tags:
+        Project: !Ref ProjectName
+        Name: !Sub "${ProjectName}-Lambda-Duration-Experiment"
+
