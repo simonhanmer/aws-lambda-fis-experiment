@@ -127,6 +127,8 @@ Resources:
       Runtime: python3.12
       MemorySize: 128
       Timeout: 10
+      FunctionUrlConfig:
+        AuthType: NONE
       Tags:
         Project: !Ref ProjectName
 
@@ -142,6 +144,8 @@ Resources:
       Runtime: python3.12
       MemorySize: 128
       Timeout: 10
+      FunctionUrlConfig:
+        AuthType: NONE
       Environment:
         Variables:
           AWS_FIS_CONFIGURATION_LOCATION: !Sub "${FISConfigBucket.Arn}/FisConfigs/*"
@@ -265,3 +269,11 @@ Resources:
         Project: !Ref ProjectName
         Name: !Sub "${ProjectName}-Lambda-Duration-Experiment"
 
+Outputs:
+  FunctionURL:
+    Description: URL for non-FIS Lambda
+    Value: !GetAtt DemoLambdaFunctionWithoutFISUrl.FunctionUrl
+
+  FunctionwithFISURL:
+    Description: URL for FIS Lambda
+    Value: !GetAtt DemoLambdaFunctionWithFISUrl.FunctionUrl
