@@ -206,6 +206,13 @@ Resources:
                   - s3:GetObject
                 Resource:
                   - !Sub "arn:aws:s3:::${FISLogsBucket}/logs/*"
+              - Sid: GetS3Config
+                Effect: Allow
+                Action:
+                  - s3:GetBucketPolicy
+                  - s3:PutBucketPolicy
+                Resource:
+                  - !GetAtt FISLogsBucket.Arn
               - Sid: GetDashboard
                 Effect: Allow
                 Action:
@@ -230,20 +237,21 @@ Resources:
           Value: !Ref ProjectName
 
 
-  FISExperimentTemplate:
+  FISDelayExperimentTemplate:
     Type: "AWS::FIS::ExperimentTemplate"
     Properties:
-      Description: "FIS Lambda experiment"
+      Description: "FIS Lambda experiment - introduce delay"
       Actions:
         delay_function:
+          Description: "Delay execution of lambda"
           ActionId: "aws:lambda:invocation-add-delay"
           Targets:
             Functions: "Functions-Target-1"
           StartAfter: []
           Parameters:
-            duration: "PT3M"
+            duration: "PT5M"
             invocationPercentage: "100"
-            startupDelayMilliseconds: "35000"
+            startupDelayMilliseconds: "10000"
       ExperimentOptions:
         EmptyTargetResolutionMode: "fail"
         AccountTargeting: "single-account"
@@ -263,11 +271,95 @@ Resources:
           LogGroupArn: !GetAtt FISLogGroup.Arn
         S3Configuration:
           BucketName: !Ref FISLogsBucket
-          Prefix: "logs"
+          Prefix: "logs/delays"
         LogSchemaVersion: 2
       Tags:
         Project: !Ref ProjectName
         Name: !Sub "${ProjectName}-Lambda-Duration-Experiment"
+
+
+  FISInvokeErrorExperimentTemplate:
+    Type: "AWS::FIS::ExperimentTemplate"
+    Properties:
+      Description: "FIS Lambda experiment - introduce invocation errors"
+      Actions:
+        invoke_error:
+          Description: "Introduce invocation error"
+          ActionId: "aws:lambda:invocation-error"
+          Targets:
+            Functions: "Functions-Target-1"
+          StartAfter: []
+          Parameters:
+            duration: "PT5M"
+            invocationPercentage: "100"
+            preventExecution: "true"
+      ExperimentOptions:
+        EmptyTargetResolutionMode: "fail"
+        AccountTargeting: "single-account"
+      StopConditions:
+      - Source: "none"
+      Targets:
+        Functions-Target-1:
+          Filters: []
+          ResourceType: "aws:lambda:function"
+          ResourceTags: {
+            FIS-Demo: true
+          }
+          SelectionMode: "ALL"
+      RoleArn: !GetAtt FISExperimentRole.Arn
+      LogConfiguration:
+        CloudWatchLogsConfiguration:
+          LogGroupArn: !GetAtt FISLogGroup.Arn
+        S3Configuration:
+          BucketName: !Ref FISLogsBucket
+          Prefix: "logs/invocation-errors"
+        LogSchemaVersion: 2
+      Tags:
+        Project: !Ref ProjectName
+        Name: !Sub "${ProjectName}-Lambda-Invocation-Errors-Experiment"
+
+
+  FISHTTPResponseExperimentTemplate:
+    Type: "AWS::FIS::ExperimentTemplate"
+    Properties:
+      Description: "FIS Lambda experiment - modify http response"
+      Actions:
+        modify_http_response:
+          Description: "Modify Lambda Response Code"
+          ActionId: "aws:lambda:invocation-http-integration-response"
+          Targets:
+            Functions: "Functions-Target-1"
+          StartAfter: []
+          Parameters:
+            duration: "PT5M"
+            invocationPercentage: "100"
+            preventExecution: "false"
+            contentTypeHeader: "application/json"
+            statusCode: "418"
+      ExperimentOptions:
+        EmptyTargetResolutionMode: "fail"
+        AccountTargeting: "single-account"
+      StopConditions:
+      - Source: "none"
+      Targets:
+        Functions-Target-1:
+          Filters: []
+          ResourceType: "aws:lambda:function"
+          ResourceTags: {
+            FIS-Demo: true
+          }
+          SelectionMode: "ALL"
+      RoleArn: !GetAtt FISExperimentRole.Arn
+      LogConfiguration:
+        CloudWatchLogsConfiguration:
+          LogGroupArn: !GetAtt FISLogGroup.Arn
+        S3Configuration:
+          BucketName: !Ref FISLogsBucket
+          Prefix: "logs/http-response"
+        LogSchemaVersion: 2
+      Tags:
+        Project: !Ref ProjectName
+        Name: !Sub "${ProjectName}-Lambda-HTTP-Response-Experiment"
 
 Outputs:
   FunctionURL:

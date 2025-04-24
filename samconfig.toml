@@ -1,0 +1,9 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "fis-demo"
+resolve_s3 = true
+s3_prefix = "fis-demo"
+region = "eu-west-2"
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "ProjectName=\"fis-demo\" RetentionInDays=\"3\""
+image_repositories = []
