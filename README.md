@@ -8,7 +8,7 @@ If you have any quesions, feel free to reach out to me via [LinkedIn](https://ww
 The main resources deployed are 
 
 ### Lambda infrastructure
-* 2 lambda functions - one configured to interact with FIS, with the FIS wrapper and a tag for filtering, and one that won't be triggered by FIS. Both lambdas use the same source code (from the [./source](source)) folder which simply
+* 2 lambda functions - one configured to interact with FIS, with the FIS wrapper and a tag for filtering, and one that won't be triggered by FIS. Both lambdas use the same source code (from the [./source](source)) folder which simply generates a list of S3 buckets in the account
 * A IAM Role giving the lambda permissions to execute, and query S3 buckets
 * A Cloudwatch Log group for the lambdas
 
@@ -51,7 +51,7 @@ In it's standard state (i.e. when there are no experiments running), the lambda 
 
 If we look at the CloudWatch logs for the lambda, as well as the normal logs, we'll see a number of lines at the beginning from the FIS lambda layer, indicating the lambda is properly configured.
 
-### Configuring a Lambda for FIS.
+## Configuring a Lambda for FIS.
 
 To enable a lambda to interact with FIS experiments, we'll need a number of items in place.
 
@@ -62,4 +62,12 @@ To enable a lambda to interact with FIS experiments, we'll need a number of item
     a. `AWS_FIS_CONFIGURATION_LOCATION` should point to the `FISConfigs` prefix within the bucket
 
     b. `AWS_LAMBDA_EXEC_WRAPPER` should have the value `/opt/aws-fis/bootstrap`
+
+## Testing the lambda with an FIS experiment.
+As mentioned earlier, this repository deploys three experiment templates which can be used to test the configured lambda. We can choose any of these to trigger an experiment, by navigating in the console to `AWS FIS > Experiment templates`, selecting a template and then starting an experiment based on the template, either by first selecting a template from the list, or opening one, and then selecting `Start Experiment`.
+
+Once the experiment is started, it will show a status which should soon transition from `Initiating` to `Running`. Each of the experiments should run for 5 minutes, which should be sufficient to open the lambda functions in the console, selecting the `-with-fis` function and invoking it via the test event we created earlier.
+
+With an experiment in progress, we should see the lambda's behaviour being modified based on the template chosen. This should be reflected in the function's output.
+
 
